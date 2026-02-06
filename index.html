@@ -5,7 +5,6 @@
   <title>DT QR Scan</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
-  <!-- html5-qrcode -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
@@ -22,9 +21,10 @@
     }
     .result {
       margin-top: 20px;
-      font-size: 18px;
-      color: #22c55e;
+      font-size: 16px;
     }
+    .ok { color: #22c55e; }
+    .err { color: #ef4444; }
   </style>
 </head>
 
@@ -33,41 +33,55 @@
   <p>Arahkan kamera ke QR Dump Truck</p>
 
   <div id="reader"></div>
-
   <div class="result" id="result"></div>
 
   <script>
     const resultDiv = document.getElementById("result");
+    let lastScan = "";
 
-    function onScanSuccess(decodedText, decodedResult) {
-      resultDiv.innerHTML = `✅ QR terbaca:<br><b>${decodedText}</b>`;
+    function onScanSuccess(decodedText) {
+      // hindari double scan cepat
+      if (decodedText === lastScan) return;
+      lastScan = decodedText;
 
-      // STOP scanner setelah berhasil
-      html5QrcodeScanner.clear();
+      resultDiv.innerHTML = "⏳ Mengirim data ke server...";
 
-      // ===== KIRIM KE SERVER (NANTI) =====
-      // fetch("/api/scan", {
-      //   method: "POST",
-      //   headers: {"Content-Type": "application/json"},
-      //   body: JSON.stringify({ dt_id: decodedText })
-      // });
+      fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dt_id: decodedText })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === "ok") {
+          resultDiv.innerHTML = `
+            <div class="ok">
+              ✅ ${data.dt_id}<br>
+              Status: <b>${data.event}</b><br>
+              Waktu: ${data.time}
+            </div>`;
+        } else {
+          resultDiv.innerHTML = `<div class="err">❌ ${data.message}</div>`;
+        }
+      })
+      .catch(err => {
+        resultDiv.innerHTML = `<div class="err">❌ Server error</div>`;
+        console.error(err);
+      });
+
+      // reset agar bisa scan DT yang sama lagi
+      setTimeout(() => { lastScan = ""; }, 3000);
     }
 
-    function onScanFailure(error) {
-      // abaikan error kecil
-    }
+    function onScanFailure(error) {}
 
     const html5QrcodeScanner = new Html5QrcodeScanner(
       "reader",
-      {
-        fps: 10,
-        qrbox: { width: 250, height: 250 }
-      },
+      { fps: 10, qrbox: { width: 250, height: 250 } },
       false
     );
 
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
   </script>
 </body>
-
 </html>
