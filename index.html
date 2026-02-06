@@ -5,83 +5,132 @@
   <title>DT QR Scan</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 
+  <!-- QR Scanner Library -->
   <script src="https://unpkg.com/html5-qrcode"></script>
 
   <style>
     body {
       font-family: Arial, sans-serif;
       background: #0f172a;
-      color: white;
+      color: #ffffff;
       text-align: center;
       padding: 20px;
     }
+
+    h2 {
+      margin-bottom: 5px;
+    }
+
     #reader {
-      width: 300px;
-      margin: auto;
+      width: 320px;
+      margin: 20px auto;
     }
-    .result {
+
+    .status {
       margin-top: 20px;
-      font-size: 16px;
+      font-size: 15px;
+      padding: 10px;
+      border-radius: 6px;
     }
-    .ok { color: #22c55e; }
-    .err { color: #ef4444; }
+
+    .ok {
+      background: #064e3b;
+      color: #22c55e;
+    }
+
+    .error {
+      background: #7f1d1d;
+      color: #fecaca;
+    }
+
+    .info {
+      color: #94a3b8;
+      font-size: 13px;
+    }
   </style>
 </head>
 
 <body>
+
   <h2>📸 DT Tailing QR Scan</h2>
-  <p>Arahkan kamera ke QR Dump Truck</p>
+  <p class="info">Arahkan kamera ke QR Dump Truck</p>
 
   <div id="reader"></div>
-  <div class="result" id="result"></div>
+
+  <div id="result" class="status info">
+    Menunggu scan QR...
+  </div>
 
   <script>
+    /**********************************************************
+     * ⚠️ GANTI IP SERVER SESUAI FASTAPI KAMU
+     **********************************************************/
+    const SERVER_API = "http://192.168.1.20:8000/api/scan";
+    // contoh: http://10.130.53.115/:8000/api/scan
+
     const resultDiv = document.getElementById("result");
     let lastScan = "";
+    let lockScan = false;
 
     function onScanSuccess(decodedText) {
-      // hindari double scan cepat
+      if (lockScan) return;
       if (decodedText === lastScan) return;
+
+      lockScan = true;
       lastScan = decodedText;
 
+      resultDiv.className = "status info";
       resultDiv.innerHTML = "⏳ Mengirim data ke server...";
 
-      fetch("/api/scan", {
+      fetch(SERVER_API, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({ dt_id: decodedText })
       })
       .then(res => res.json())
       .then(data => {
         if (data.status === "ok") {
+          resultDiv.className = "status ok";
           resultDiv.innerHTML = `
-            <div class="ok">
-              ✅ ${data.dt_id}<br>
-              Status: <b>${data.event}</b><br>
-              Waktu: ${data.time}
-            </div>`;
+            ✅ <b>${data.dt_id}</b><br>
+            Event: <b>${data.event}</b><br>
+            Time: ${data.time}
+          `;
         } else {
-          resultDiv.innerHTML = `<div class="err">❌ ${data.message}</div>`;
+          resultDiv.className = "status error";
+          resultDiv.innerHTML = `❌ ${data.message || "Scan gagal"}`;
         }
       })
       .catch(err => {
-        resultDiv.innerHTML = `<div class="err">❌ Server error</div>`;
+        resultDiv.className = "status error";
+        resultDiv.innerHTML = "❌ Tidak bisa terhubung ke server";
         console.error(err);
+      })
+      .finally(() => {
+        setTimeout(() => {
+          lockScan = false;
+          lastScan = "";
+        }, 3000); // cooldown 3 detik
       });
-
-      // reset agar bisa scan DT yang sama lagi
-      setTimeout(() => { lastScan = ""; }, 3000);
     }
 
-    function onScanFailure(error) {}
+    function onScanFailure(error) {
+      // sengaja dikosongkan (noise camera)
+    }
 
     const html5QrcodeScanner = new Html5QrcodeScanner(
       "reader",
-      { fps: 10, qrbox: { width: 250, height: 250 } },
+      {
+        fps: 10,
+        qrbox: { width: 250, height: 250 }
+      },
       false
     );
 
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
   </script>
+
 </body>
 </html>
